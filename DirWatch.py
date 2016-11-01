@@ -41,7 +41,7 @@
 ##############################################################################
 ### OPTIONS                                                                ###
 
-# Watch Path(s).
+# Watch Paths.
 #
 # Specify the directories you want to monitor for NZB-Files.
 # The Tildy (~) can be used to expand the path in efforts to support the home
