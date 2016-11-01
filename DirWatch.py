@@ -51,6 +51,15 @@
 #
 #WatchPaths=~/Downloads, ~/Dropbox
 
+# Maximum Archive Size in Kilobytes.
+#
+# If we find a Zip file within one of our WatchPath's (defined above), then we
+# verify that it is no larger then this value (in Kilobytes). This is to
+# prevent processing excessively large compressed files that in no way would
+# have had an ZB-File in them anyway.
+#
+#MaxArchiveSizeKB=150
+
 # Enable debug logging (yes, no).
 #
 # If you experience a problem, you can bet I'll have a much easier time solving
@@ -73,6 +82,7 @@ from os.path import splitext
 from os.path import expanduser
 from os.path import exists
 from shutil import move
+from zipfile import ZipFile
 
 # This is required if the below environment variables
 # are not included in your environment already
@@ -92,11 +102,18 @@ from nzbget.Utils import tidy_path
 # Regular expression for the handling of NZB-Files
 NZB_FILE_RE = re.compile('^(?P<filename>.*)\.nzb$', re.IGNORECASE)
 
+# Regular expression for the handling of ZIP-Files
+ZIP_FILE_RE = re.compile('^(?P<filename>.*)\.zip$', re.IGNORECASE)
+
 # The number of seconds a matched directory/file has to have aged before it
 # is processed further.  This prevents the script from removing content
 # that may being processed 'now'.  All content must be older than this
 # to be considered. This value is represented in seconds.
 DEFAULT_MATCH_MINAGE = 30
+
+# The maximum size a compressed file can be before it is considered to
+# be looked within for NZB-Files
+DEFAULT_COMPRESSED_MAXSIZE_KB = 150
 
 class DIRWATCH_MODE(object):
     # Move content to the path specified instead of deleting it
@@ -120,6 +137,12 @@ class DirWatchScript(SchedulerScript):
     If a file is found, it's contents are automatically moved into the
     NZBGet queue for processing.
     """
+
+    # Define our minimum age a file can be
+    min_age = DEFAULT_MATCH_MINAGE
+
+    # Define our maxium archive size a compressed file can be
+    max_archive_size = DEFAULT_COMPRESSED_MAXSIZE_KB
 
     def _handle(self, source_path, target_dir):
         """
@@ -183,7 +206,7 @@ class DirWatchScript(SchedulerScript):
 
         return True
 
-    def watch_library(self, sources, target_dir, minage, *args, **kwargs):
+    def watch_library(self, sources, target_dir, *args, **kwargs):
         """
           Recursively scan source directories specified for NZB-Files
           and move found entries to the target directory
@@ -200,7 +223,7 @@ class DirWatchScript(SchedulerScript):
         self.logger.info('Target directory set to: %s' % target_dir)
 
         # Create a reference time
-        ref_time = datetime.now() - timedelta(seconds=minage)
+        ref_time = datetime.now() - timedelta(seconds=self.min_age)
 
         for _path in sources:
             # Get our absolute path
@@ -212,19 +235,62 @@ class DirWatchScript(SchedulerScript):
                     'Source directory %s was not found.' % path)
                 continue
 
+            regex_filter=[ NZB_FILE_RE, ]
+            if self.max_archive_size > 0:
+                # Add ZIP Files into our mix
+                regex_filter.append(ZIP_FILE_RE)
+
             # Scan our directory (but not recursively)
             possible_matches = self.get_files(
                 path,
-                regex_filter=NZB_FILE_RE,
+                regex_filter=regex_filter,
                 min_depth=1, max_depth=1,
                 fullstats=True,
                 skip_directories=True,
             )
 
-            # Filter our files that are to new
-            filtered_matches = dict([ (k, v) for (k, v) in \
-                                     possible_matches.items() if \
-                                     v['modified'] < ref_time ]).keys()
+            # Filter our files that are too new
+            filtered_matches = dict(
+                [ (k, v) for (k, v) in possible_matches.iteritems() \
+                 if v['modified'] < ref_time ])
+
+            # Do our compression check as a second step since it's
+            # possible to disable it
+            if self.max_archive_size > 0:
+                zip_files = [ f for (f, m) in filtered_matches.iteritems() \
+                             if ZIP_FILE_RE.match(f) is not None and \
+                             m['filesize'] > 0 and \
+                             (m['filesize']/1000) < self.max_archive_size ]
+
+                for zfile in zip_files:
+                    # Iterate over each zip file and peak inside it
+                    z_contents = None
+                    try:
+                        zp = ZipFile(zfile, mode='r')
+                        z_contents = zp.namelist()
+
+                    except Exception, e:
+                        self.logger.error('Could not peek in ZIP: %s' % zfile)
+                        self.logger.debug('Peek Exception %s' % str(e))
+                        # pop file from our move list
+                        del filtered_matches[zfile]
+                        continue
+
+                    # Let's have a look at our contents to see if there is a
+                    # non-NZB-File entry
+                    is_nzb_only = next((False for i in z_contents \
+                                             if NZB_FILE_RE.match(i) is None), True)
+                    if not is_nzb_only:
+                        self.logger.debug(
+                            'ZIP %s: contains non NZB-Files within it.' % (
+                            zfile,
+                        ) + ' Skipping')
+
+                        # pop file from our move list
+                        del filtered_matches[zfile]
+                        continue
+
+                    self.logger.debug('ZIP %s: contains NZB-Files.' % zfile)
 
             if len(filtered_matches) <= 0:
                 self.logger.debug(
@@ -232,7 +298,7 @@ class DirWatchScript(SchedulerScript):
                 )
                 continue
 
-            for fullpath in filtered_matches:
+            for fullpath in filtered_matches.iterkeys():
                 # want to avoid destroying something we shouldn't
                 self._handle(fullpath, target_dir)
 
@@ -250,9 +316,16 @@ class DirWatchScript(SchedulerScript):
 
             return False
 
-        # Store target directory
-        minage = int(self.get('ProcessMinAge', DEFAULT_MATCH_MINAGE))
+        # Store our variables
+        self.max_archive_size = int(
+            self.get('MaxArchiveSizeKB', self.max_archive_size))
+
+        self.min_age = int(self.get('ProcessMinAge', self.min_age))
+
+        # Store our source paths
         source_paths = self.parse_path_list(self.get('WatchPaths'))
+
+        # Store target directory
         target_path = tidy_path(self.get('NzbDir'))
         self.mode = script.get('Mode', DIRWATCH_MODE_DEFAULT)
         if not isdir(target_path):
@@ -265,7 +338,6 @@ class DirWatchScript(SchedulerScript):
         return self.watch_library(
             source_paths,
             target_path,
-            minage=minage,
         )
 
     def scheduler_main(self, *args, **kwargs):
@@ -299,7 +371,7 @@ if __name__ == "__main__":
     parser.add_option(
         "-a",
         "--min-age",
-        dest="minage",
+        dest="min_age",
         help="Specify the minimum age a NZB-File must be " +\
         "before considering it for processing. This value " +\
         "is interpreted in seconds and defaults to %d sec(s). " % \
@@ -308,6 +380,20 @@ if __name__ == "__main__":
         "NZB-File is still being written to disk at the same time "\
         "as we're trying to process it.",
         metavar="AGE_IN_SEC",
+    )
+    parser.add_option(
+        "-s",
+        "--max-archive-size",
+        dest="max_archive_size",
+        help="Specify the maximum size a detected compressed file can be " +\
+        "before ignoring it. If the found compressed file is within this " +\
+        "specified value, it's contents will be scanned to see if it " +\
+        "(only) contains NZB-Files. These types of files would qualify " +\
+        "to be moved as well. Set this value to Zero (0) to not process " +\
+        "compressed files. The value is interpreted in Kilobytes and has " +\
+        "a default value of %s" % (DEFAULT_COMPRESSED_MAXSIZE_KB) +\
+        "if not otherwise specified.",
+        metavar="SIZE_IN_KB",
     )
     parser.add_option(
         "-p",
@@ -348,7 +434,8 @@ if __name__ == "__main__":
     # careful to only set() values that have been set by an
     # external switch. Otherwise we use defaults or what might
     # already be resident in memory (environment variables).
-    _minage = options.minage
+    _min_age = options.min_age
+    _max_archive_size = options.max_archive_size
     _preview = options.preview_only is True
     _target_dir = options.target_dir
 
@@ -381,14 +468,25 @@ if __name__ == "__main__":
         # Toggle Preview Mode
         script.set('Mode', DIRWATCH_MODE.PREVIEW)
 
-    if _minage:
+    if _max_archive_size:
         try:
-            _minage = str(abs(int(_minage)))
-            script.set('ProcessMinAge', _minage)
+            _max_archive_size = str(abs(int(_max_archive_size)))
+            script.set('MaxArchiveSizeKB', _max_archive_size)
 
         except (ValueError, TypeError):
             script.logger.error(
-                'An invalid `minage` (%s) was specified.' % (_minage)
+                'An invalid `max_archive_size` (%s) was specified.' % (_max_archive_size)
+            )
+            exit(EXIT_CODE.FAILURE)
+
+    if _min_age:
+        try:
+            _min_age = str(abs(int(_min_age)))
+            script.set('ProcessMinAge', _min_age)
+
+        except (ValueError, TypeError):
+            script.logger.error(
+                'An invalid `min_age` (%s) was specified.' % (_min_age)
             )
             exit(EXIT_CODE.FAILURE)
 
