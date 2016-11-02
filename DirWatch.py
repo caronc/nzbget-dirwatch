@@ -31,7 +31,7 @@
 # Author: Chris Caron (lead2gold@gmail.com).
 # Date: Mon, Oct 31th, 2016.
 # License: GPLv3 (http://www.gnu.org/licenses/gpl.html).
-# Script Version: 0.0.1
+# Script Version: 0.0.2
 #
 # The script takes a series of directories you want to monitor.
 #
@@ -56,15 +56,15 @@
 # If we find a Zip file within one of our WatchPath's (defined above), then we
 # verify that it is no larger then this value (in Kilobytes). This is to
 # prevent processing excessively large compressed files that in no way would
-# have had an ZB-File in them anyway.
+# have ever had an NZB-File in them anyway.
 #
 #MaxArchiveSizeKB=150
 
 # Enable debug logging (yes, no).
 #
-# If you experience a problem, you can bet I'll have a much easier time solving
-# it for you if your logs include debugging.  This can be made possible by
-# flipping this flag here.
+# If you experience a problem, you can bet the developer of this script will
+# have a much easier time troubleshootng it for you if your logs include
+# debugging.  Debugging is made possible by flipping this flag here.
 #
 #Debug=no
 
