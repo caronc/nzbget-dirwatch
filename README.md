@@ -4,9 +4,29 @@ See the _Command Line_ section below for details how you can easily use this on 
 
 DirWatch Scheduler Script
 ========================
-DirWatch is a script designed to scan a set of directories that you
-tell it to.  When an NZB-File becomes present in one of these folders it
-is automatically moved to the NZBGet's download directory for processing.
+DirWatch is a script that allows you to identify one or more directories it
+should scan for NZB-Files in. When an NZB-File is found (or even a zip file
+containing NZB-Files), it is moved to a new directory of your choice.
+
+Why Would I Need This?
+======================
+NZBGet limits you to identifying _just one_ directory it should scan/watch for
+NZB-Files in (for processing). This is okay for most people, but consider a
+scenario where you have a DropBox share that you might want to put something in
+from your phone, or at work.  Wouldn't it be great if NZBGet picked that up for
+processing too!  Maybe there are multiple users on your network who want use
+NZBGet too, rather then giving them your admin login (to NZBGet), you can just
+scan a folder in their home directory (or on a network path) instead.
+
+In short: This script allows you to process NZB-Get files that appear in multiple
+directories instead of just the one.
+
+How It Works
+============
+Whatever additional path you specify, the script will just move the detected NZB-Files
+out of them and into the directory NZBGet already processes (identified by _NzbDir_ in
+the Paths section of it's configuration). If you're calling this from the command line
+then you must provide the _NzbDir_ as an argument. There are examples of this below.
 
 Installation Instructions
 =========================
