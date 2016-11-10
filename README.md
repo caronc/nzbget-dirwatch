@@ -33,6 +33,7 @@ Installation Instructions
 1. Ensure you have at least Python v2.6 or higher installed onto your system.
 2. Simply place the __DirWatch.py__ and __DirWatch__ directory together.
    * __NZBGet users__: you will want to place these inside of your _nzbget/scripts_ directory. Please ensure you are running _(at least)_ NZBGet v11.0 or higher. You can acquire the latest version of of it from [here](http://nzbget.net/download).
+   * __NZBGet users__: Create a Schedule from the settings of NZBGet and consider putting a time entry that scans every 5 minutes like: \*:00,\*:05,\*:10,\*:15,\*:20,\*:25,\*:30,\*:35,\*:40,\*:45,\*:50,\*:55
 
 The Non-NZBGet users can also use this script via a cron (or simply call it
 from the command line) to automatically poll directories for the latest
