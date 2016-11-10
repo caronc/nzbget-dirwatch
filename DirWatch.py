@@ -333,7 +333,7 @@ class DirWatchScript(SchedulerScript):
 
         # Store target directory
         target_path = tidy_path(self.get('NzbDir'))
-        self.mode = script.get('Mode', DIRWATCH_MODE_DEFAULT)
+        self.mode = self.get('Mode', DIRWATCH_MODE_DEFAULT)
         if not isdir(target_path):
             self.logger.error(
                 "The target directory '%s' was not found." % \
