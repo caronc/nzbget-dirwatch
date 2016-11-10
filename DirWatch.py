@@ -235,6 +235,12 @@ class DirWatchScript(SchedulerScript):
                     'Source directory %s was not found.' % path)
                 continue
 
+            if path == target_dir:
+                # We're done if the target path isn't a directory
+                self.logger.warning(
+                    'Source and Target directory (%s) are the same.' % path)
+                continue
+
             regex_filter=[ NZB_FILE_RE, ]
             if self.max_archive_size > 0:
                 # Add ZIP Files into our mix
