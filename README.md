@@ -106,5 +106,6 @@ If the script behaves as you expect it should, you can schedule it as a cron
 to frequently move matched NZB-Files found in the specified Source Directories
 ```bash
 # $> crontab -e
-0 0 * * * /path/to/DirWatch.py -t /path/to/NZBGet/NzbDir ~/DropBox
+# Scan every 2 minutes:
+*/2 * * * * /path/to/DirWatch.py -t /path/to/NZBGet/NzbDir ~/DropBox
 ```
