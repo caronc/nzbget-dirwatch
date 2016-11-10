@@ -29,9 +29,9 @@
 #
 # Info about this DirWatch NZB Script:
 # Author: Chris Caron (lead2gold@gmail.com).
-# Date: Mon, Oct 31th, 2016.
+# Date: Wed, Nov 9th, 2016.
 # License: GPLv3 (http://www.gnu.org/licenses/gpl.html).
-# Script Version: 0.0.2
+# Script Version: 0.0.3
 #
 # The script takes a series of directories you want to monitor.
 #
