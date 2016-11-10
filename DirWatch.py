@@ -349,6 +349,9 @@ class DirWatchScript(SchedulerScript):
     def scheduler_main(self, *args, **kwargs):
         """Scheduler
         """
+        # We always use MOVE mode when the call comes from
+        # NZBGet
+        self.set('Mode', DIRWATCH_MODE.MOVE)
 
         return self.watch()
 
