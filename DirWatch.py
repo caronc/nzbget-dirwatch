@@ -49,7 +49,7 @@
 # comma (,) to delimit them. eg:
 #   path1, path2, path3, etc
 #
-#WatchPaths=~/Downloads, ~/Dropbox
+#WatchPaths=~/Downloads, ~/Dropbox/NZB-Files
 
 # Maximum Archive Size in Kilobytes.
 #
@@ -59,6 +59,16 @@
 # have ever had an NZB-File in them anyway.
 #
 #MaxArchiveSizeKB=150
+
+# Scan Cycles.
+#
+# Specify the number of seconds you wish to poll the specified watch paths
+# for content. Set this to zero to just use the times defined by the
+# NZBGet Scheduler instead. By setting this to any value larger then 0
+# (but no less then 30), The script will run indefinitely (or until
+# NZB-Get is shutdown)
+#
+#PollTimeSec=60
 
 # Enable debug logging (yes, no).
 #
@@ -83,6 +93,7 @@ from os.path import expanduser
 from os.path import exists
 from shutil import move
 from zipfile import ZipFile
+from time import sleep
 
 # This is required if the below environment variables
 # are not included in your environment already
@@ -115,6 +126,12 @@ DEFAULT_MATCH_MINAGE = 30
 # be looked within for NZB-Files
 DEFAULT_COMPRESSED_MAXSIZE_KB = 150
 
+# The default polling time for the directory watch script
+DEFAULT_POLL_TIME_SEC = 60
+
+# The minimum allowable setting the poll time can be
+MINIMUM_POLL_TIME_SEC = 30
+
 class DIRWATCH_MODE(object):
     # Move content to the path specified instead of deleting it
     MOVE = "Move"
@@ -137,6 +154,10 @@ class DirWatchScript(SchedulerScript):
     If a file is found, it's contents are automatically moved into the
     NZBGet queue for processing.
     """
+
+    # Our default polling time in seconds; set this to zero to disable
+    # poll checks.
+    poll_time_sec = DEFAULT_POLL_TIME_SEC
 
     # Define our minimum age a file can be
     min_age = DEFAULT_MATCH_MINAGE
@@ -285,7 +306,7 @@ class DirWatchScript(SchedulerScript):
                     # Let's have a look at our contents to see if there is a
                     # non-NZB-File entry
                     is_nzb_only = next((False for i in z_contents \
-                                             if NZB_FILE_RE.match(i) is None), True)
+                        if NZB_FILE_RE.match(i) is None), True)
                     if not is_nzb_only:
                         self.logger.debug(
                             'ZIP %s: contains non NZB-Files within it.' % (
@@ -319,7 +340,7 @@ class DirWatchScript(SchedulerScript):
             'WatchPaths',
             'NzbDir',
             )):
-
+            self.logger.error("Missing Environment Variables.")
             return False
 
         # Store our variables
@@ -352,8 +373,47 @@ class DirWatchScript(SchedulerScript):
         # We always use MOVE mode when the call comes from
         # NZBGet
         self.set('Mode', DIRWATCH_MODE.MOVE)
+        self.get('PollTimeSec', DEFAULT_POLL_TIME_SEC)
+        try:
+            poll_time = abs(int(
+                self.get('PollTimeSec', DEFAULT_POLL_TIME_SEC)))
 
-        return self.watch()
+        except (ValueError, TypeError):
+            self.logger.warning(
+                "The poll time specified was invalid; " +
+                "Defaulting it to %ds." % DEFAULT_POLL_TIME_SEC)
+            poll_time = DEFAULT_POLL_TIME_SEC
+
+        if poll_time != 0 and poll_time < MINIMUM_POLL_TIME_SEC:
+            self.logger.warning(
+                "The poll time specified was to small; " +
+                "Defaulting it to %ds." % MINIMUM_POLL_TIME_SEC)
+
+        if poll_time == 0:
+            self.logger.debug('Single Instance Mode')
+            # run a single instance
+            return self.watch()
+
+        # If we reach here, we run indefinitely presuming we are not
+        # already runnning elsewhere
+
+        # Create our PID
+        self.is_unique_instance()
+
+        self.logger.debug('Parallel Instance Mode')
+
+        # Run until we have to quit
+        while True:
+            # Infinit loop; we rely on a signal sent by
+            # NZBGet to quit
+            if self.watch() is False:
+                # We're done if we have a problem
+                return False
+
+            self.logger.debug(
+                "Next NZB-File Scan in %d seconds..." % poll_time,
+            )
+            sleep(poll_time)
 
     def main(self, *args, **kwargs):
         """CLI
