@@ -403,7 +403,7 @@ class DirWatchScript(SchedulerScript):
         self.logger.debug('Parallel Instance Mode')
 
         # Run until we have to quit
-        while True:
+        while self.is_unique_instance():
             # Infinit loop; we rely on a signal sent by
             # NZBGet to quit
             if self.watch() is False:
