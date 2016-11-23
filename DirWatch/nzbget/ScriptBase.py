@@ -94,6 +94,10 @@ functionality such as:
                   information) was found, then an empty dictionary is returned
                   instead.
 
+* is_unique_instance() - Allows you to ensure your instance of your script is
+                  unique. This is useful for Scheduled scripts which can be
+                  called and then run concurrently with NZBGet.
+
 Ideally, you'll write your script using this class as your base wrapper
 requiring you to only define a main() function and call run().
 You no longer need to manage the different return codes NZBGet uses,
@@ -147,6 +151,7 @@ from getpass import getuser
 from logging import Logger
 from datetime import datetime
 from Utils import tidy_path
+from urllib import unquote
 
 from Logger import VERBOSE_DEBUG
 from Logger import VERY_VERBOSE_DEBUG
@@ -1018,9 +1023,6 @@ class ScriptBase(object):
             except (ValueError, TypeError), e:
                 # Bad data
                 if verbose:
-                    self.logger.debug(
-                        'PID-File - Access Exception %s' % str(e))
-
                     self.logger.info(
                             'Removed (dead) PID-File: %s' % self.pidfile)
                 try:
@@ -1422,7 +1424,7 @@ class ScriptBase(object):
 
         return results
 
-    def parse_url(self, url, default_schema='http'):
+    def parse_url(self, url, default_schema='http', qsd_auth=True):
         """A function that greatly simplifies the parsing of a url
         specified by the end user.
 
@@ -1557,6 +1559,24 @@ class ScriptBase(object):
                 # no problem then, user only exists
                 # and it's already assigned
                 pass
+
+        if qsd_auth:
+            # Allow people to place a user= inline in the query string
+            if result['user'] is None:
+                try:
+                    if 'user' in result['qsd'] and len(result['qsd']['user']):
+                        result['user'] = unquote(result['qsd']['user'])
+
+                except AttributeError:
+                    pass
+
+            if result['password'] is None:
+                try:
+                    if 'pass' in result['qsd'] and len(result['qsd']['pass']):
+                        result['password'] = unquote(result['qsd']['pass'])
+
+                except AttributeError:
+                    pass
 
         try:
             (result['host'], result['port']) = \
