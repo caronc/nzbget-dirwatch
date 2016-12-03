@@ -1,5 +1,4 @@
-__Note:__ This script was intended to be an [NZBGet](http://nzbget.net) and _Scheduling_
-script for _NZBGet_. However, it also works perfectly well as a standalone script for others too! It can be easily adapted to anyone's environment.
+__Note:__ This script was intended to work with [NZBGet](http://nzbget.net) as a  _Scheduling_ script. However, it also works perfectly well as a standalone script for others too! It can be easily adapted to anyone's environment.
 See the _Command Line_ section below for details how you can easily use this on it's own (without NZBGet).
 
 DirWatch Scheduler Script
