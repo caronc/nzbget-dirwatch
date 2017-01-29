@@ -4,7 +4,7 @@
 # DirWatch scan script for NZBGet to move nzb files detected elsewhere
 # into NZBGet's file queue for processing.
 #
-# Copyright (C) 2016 Chris Caron <lead2gold@gmail.com>
+# Copyright (C) 2017 Chris Caron <lead2gold@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU Lesser General Public License as published by
@@ -29,9 +29,9 @@
 #
 # Info about this DirWatch NZB Script:
 # Author: Chris Caron (lead2gold@gmail.com).
-# Date: Wed, Nov 22nd, 2016.
+# Date: Sun, Jan 29th, 2017.
 # License: GPLv3 (http://www.gnu.org/licenses/gpl.html).
-# Script Version: 0.1.0
+# Script Version: 0.1.0b
 #
 # The script takes a series of directories you want to monitor.
 #
@@ -48,6 +48,14 @@
 # directory. You can specify as many paths as you want, simply just add a
 # comma (,) to delimit them. eg:
 #   path1, path2, path3, etc
+#
+# You can additionally specify options too such as:
+#   - c=category
+#
+# Options are specified at the end of the path name like one would do for
+# a URL. For example, one might specify the following to always load content
+# from a specific path and treat the NZBs found as books:
+#    /path/to/book/dir?c=books
 #
 #WatchPaths=~/Downloads, ~/Dropbox/NZB-Files
 
@@ -82,6 +90,7 @@
 ##############################################################################
 
 import re
+from os import unlink
 from os.path import join
 from os.path import basename
 from os.path import abspath
@@ -94,6 +103,7 @@ from os.path import exists
 from shutil import move
 from zipfile import ZipFile
 from time import sleep
+from urlparse import parse_qsl
 
 # This is required if the below environment variables
 # are not included in your environment already
@@ -109,6 +119,9 @@ from nzbget import SchedulerScript
 from nzbget import EXIT_CODE
 from nzbget import SCRIPT_MODE
 from nzbget.Utils import tidy_path
+
+# Match paths (path can't have a question makr in it though)
+ARG_EXTRACT_RE = re.compile('^(?P<path>[^?]+)(\?(?P<args>.*))?$')
 
 # Regular expression for the handling of NZB-Files
 NZB_FILE_RE = re.compile('^(?P<filename>.*)\.nzb$', re.IGNORECASE)
@@ -146,6 +159,10 @@ DIRWATCH_MODES = (
 
 # Default in a Read-Only Mode; It's the safest way!
 DIRWATCH_MODE_DEFAULT = DIRWATCH_MODE.PREVIEW
+
+# Allow different combinations of the category keyword when
+# specifying it on the command line
+CATEGORY_KEYWORDS = ('c', 'cat', 'category')
 
 class DirWatchScript(SchedulerScript):
     """A Script for NZBGet to allow one to monitor multiple locations that
@@ -247,8 +264,31 @@ class DirWatchScript(SchedulerScript):
         ref_time = datetime.now() - timedelta(seconds=self.min_age)
 
         for _path in sources:
+
+            _parsed = ARG_EXTRACT_RE.match(_path)
+
+            # create an argument map
+            args = {}
+
+            if _parsed is None:
+                # Could not math path; just use what we were passed in
+                path = _path
+            else:
+                path = _parsed.group('path')
+                try:
+                    args = dict([ (k.lower().strip(), v.strip()) \
+                                      for k, v in parse_qsl(
+                            _parsed.group('args'),
+                            keep_blank_values=True,
+                            strict_parsing=False,
+                    )])
+
+                except AttributeError:
+                    # No problem; there simply wasn't anything to parse
+                    pass
+
             # Get our absolute path
-            path = abspath(expanduser(_path))
+            path = abspath(expanduser(path))
 
             if not isdir(path):
                 # We're done if the target path isn't a directory
@@ -298,7 +338,7 @@ class DirWatchScript(SchedulerScript):
 
                     except Exception, e:
                         self.logger.error('Could not peek in ZIP: %s' % zfile)
-                        self.logger.debug('Peek Exception %s' % str(e))
+                        self.logger.debug('ZIP Exception %s' % str(e))
                         # pop file from our move list
                         del filtered_matches[zfile]
                         continue
@@ -325,10 +365,92 @@ class DirWatchScript(SchedulerScript):
                 )
                 continue
 
-            for fullpath in filtered_matches.iterkeys():
-                # want to avoid destroying something we shouldn't
-                self._handle(fullpath, target_dir)
+            category = next(( args[k] \
+                             for k in CATEGORY_KEYWORDS if k in args), "")\
+                            .strip()
 
+            if category:
+                if not self.api_connect():
+                    self.logger.warning(
+                        'A category was defined, but a connection to NZBGet '\
+                        ' could not be established.')
+                    continue;
+
+            for fullpath in filtered_matches.iterkeys():
+                # Iterate over each file and move it's content into the source
+                # however, if a category was parsed, then we need to directly
+                # connect to the NZBGet API and pass the NZB-File along bearing
+                # the category we specified.  This gets a bit more tricky if
+                # we're dealing with zip (compressed files).  We need to open these
+                # up and parse the content from within them instead.
+
+                if not category:
+                    # move our content
+                    self._handle(fullpath, target_dir)
+                    continue
+
+                # If we reach here, we have some extra processing to do before
+                # we pass the data right into NZBGet via its API
+                if ZIP_FILE_RE.match(fullpath):
+                    try:
+                        zp = ZipFile(fullpath, mode='r')
+                        z_contents = zp.namelist()
+
+                    except Exception, e:
+                        self.logger.warning(
+                            'Could not access Zipped NZB-File %s.' % (
+                                fullpath,
+                            ))
+                        self.logger.debug('ZIP Exception %s' % str(e))
+                        continue
+
+                    # Iterate over our zip files
+                    zip_loaded_okay = True
+                    for znzb in z_contents:
+                        if not NZB_FILE_RE.match(znzb):
+                            continue
+
+                        # Read our content back
+                        if not self.add_nzb(basename(znzb),
+                                            content=zp.read(znzb),
+                                            category=category):
+
+                            self.logger.warning(
+                                'Failed to push Compressed NZB-File content '
+                                '%s to NZBGet (category=%s)' % (
+                                    fullpath, category,
+                                ))
+
+                            zip_loaded_okay = False
+                            break
+
+                    if zip_loaded_okay is False:
+                        # We failed
+                        continue
+
+                # Load our content directly via it's file
+                elif not self.add_nzb(fullpath, category=category):
+                    self.logger.warning(
+                        'Failed to push NZB-File '
+                        '%s to NZBGet (category=%s)' % (
+                            fullpath, category,
+                        ))
+                    continue
+
+                self.logger.info('Loaded NZB-File: %s (category=%s)' % (
+                    basename(fullpath), category,
+                ))
+
+                # We were successful; unlink our file
+                try:
+                    unlink(fullpath)
+
+                except:
+                    self.logger.warning(
+                        'Failed to remove NZB-File '
+                        '%s after loading it into NZBGet' % (
+                            fullpath,
+                        ))
         return True
 
 
