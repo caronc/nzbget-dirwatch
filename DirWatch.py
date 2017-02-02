@@ -19,8 +19,9 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with subliminal.  If not, see <http://www.gnu.org/licenses/>.
 #
-
-
+##############################################################################
+### TASK TIME: *                                                           ###
+##############################################################################
 ##############################################################################
 ### NZBGET SCHEDULER SCRIPT                                                ###
 
@@ -164,6 +165,7 @@ DIRWATCH_MODE_DEFAULT = DIRWATCH_MODE.PREVIEW
 # specifying it on the command line
 CATEGORY_KEYWORDS = ('c', 'cat', 'category')
 
+
 class DirWatchScript(SchedulerScript):
     """A Script for NZBGet to allow one to monitor multiple locations that
     may potentially contain an NZB-File.
@@ -268,7 +270,7 @@ class DirWatchScript(SchedulerScript):
             _parsed = ARG_EXTRACT_RE.match(_path)
 
             # create an argument map
-            args = {}
+            _args = {}
 
             if _parsed is None:
                 # Could not math path; just use what we were passed in
@@ -276,7 +278,7 @@ class DirWatchScript(SchedulerScript):
             else:
                 path = _parsed.group('path')
                 try:
-                    args = dict([ (k.lower().strip(), v.strip()) \
+                    _args = dict([ (k.lower().strip(), v.strip()) \
                                       for k, v in parse_qsl(
                             _parsed.group('args'),
                             keep_blank_values=True,
@@ -365,8 +367,8 @@ class DirWatchScript(SchedulerScript):
                 )
                 continue
 
-            category = next(( args[k] \
-                             for k in CATEGORY_KEYWORDS if k in args), "")\
+            category = next(( _args[k] \
+                             for k in CATEGORY_KEYWORDS if k in _args), "")\
                             .strip()
 
             if category:
@@ -381,8 +383,9 @@ class DirWatchScript(SchedulerScript):
                 # however, if a category was parsed, then we need to directly
                 # connect to the NZBGet API and pass the NZB-File along bearing
                 # the category we specified.  This gets a bit more tricky if
-                # we're dealing with zip (compressed files).  We need to open these
-                # up and parse the content from within them instead.
+                # we're dealing with zip (compressed files).
+                # We need to open these up and parse the content from within
+                # them instead.
 
                 if not category:
                     # move our content
@@ -602,6 +605,21 @@ if __name__ == "__main__":
         metavar="FILE",
     )
     parser.add_option(
+        "-u",
+        "--api-url",
+        dest="api_url",
+        help="Specify the URL of the NZB-Get API server such as: "
+        " nzbget://user:pass@control.nzbget.host (to access insecure "
+        "port 6789), "
+        " nzbgets://user:pass@control.nzbget.host (to access secure "
+        "port 6791), "
+        " nzbget://user:pass@control.nzbget.host:port (to specify your "
+        "own insecure port), and"
+        " nzbgets://user:pass@control.nzbget.host:port (to specify your "
+        "own secure port).  By default nzbget://127.0.0.1 is used.",
+        metavar="API_URL",
+    )
+    parser.add_option(
         "-D",
         "--debug",
         action="store_true",
@@ -629,11 +647,12 @@ if __name__ == "__main__":
     _max_archive_size = options.max_archive_size
     _preview = options.preview_only is True
     _target_dir = options.target_dir
+    _api_url = options.api_url
 
     # Default Script Mode
     script_mode = None
 
-    if _preview or _watch_paths or _target_dir:
+    if _api_url or _preview or _watch_paths or _target_dir:
         # By specifying one of the followings; we know for sure that the
         # user is running this script manually from the command line.
         # is running this as a standalone script,
@@ -647,6 +666,45 @@ if __name__ == "__main__":
         debug=debug,
         script_mode=script_mode,
     )
+
+    if _api_url:
+        # attempt to parse the URL specified and set the appropriate
+        # system variables
+        url = script.parse_url(_api_url)
+        if url:
+            if 'schema' in url and url['schema']:
+                if url['schema'][-1] in ('s', 'S'):
+                    script.set('SecureControl', 'True')
+                else:
+                    script.set('SecureControl', 'False')
+
+            if 'host' in url and url['host']:
+                script.set('ControlIP', url['host'])
+
+            try:
+                if 'port' in url and url['port']:
+                    _port = str(abs(int(url['port'])))
+                    script.set('SecurePort', _port)
+                    script.set('ControlPort', _port)
+
+            except (ValueError, TypeError):
+                script.logger.error(
+                    'An invalid port was specified in the `api url` '
+                    '(%s).' % (url['port'])
+                )
+                exit(EXIT_CODE.FAILURE)
+
+            if 'user' in url:
+                if url['user']:
+                    script.set('ControlUsername', url['user'])
+                else:
+                    script.set('ControlUsername', '')
+
+            if 'password' in url:
+                if url['password']:
+                    script.set('ControlPassword', url['password'])
+                else:
+                    script.set('ControlPassword', '')
 
     if _watch_paths:
         # Default mode to Move
