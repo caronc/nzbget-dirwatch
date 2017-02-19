@@ -196,17 +196,20 @@ class DirWatchScript(SchedulerScript):
         A Simple wrapper to handle content in addition to logging it.
         """
 
-        if not isfile(source_path):
-            self.logger.warning(
-                "The source file '%s' was not found (for handling)." % \
-                source_path,
-            )
+        if not target_dir:
             return False
 
         if not isdir(target_dir):
             self.logger.error(
                 "The target directory '%s' was not found (for handling)." % \
                 target_dir,
+            )
+            return False
+
+        if not isfile(source_path):
+            self.logger.warning(
+                "The source file '%s' was not found (for handling)." % \
+                source_path,
             )
             return False
 
@@ -259,15 +262,16 @@ class DirWatchScript(SchedulerScript):
           and move found entries to the target directory
 
         """
-        # Target Directory
-        target_dir = abspath(expanduser(target_dir))
-        if not isdir(target_dir):
-            # We're done if the target path isn't a directory
-            self.logger.error(
-                'Target directory %s was not found.' % target_dir)
-            return False
+        if target_dir is not None:
+            # Target Directory exists (we're not doing remote pushes)
+            target_dir = abspath(expanduser(target_dir))
+            if not isdir(target_dir):
+                # We're done if the target path isn't a directory
+                self.logger.error(
+                    'Target directory %s was not found.' % target_dir)
+                return False
 
-        self.logger.info('Target directory set to: %s' % target_dir)
+            self.logger.info('Target directory set to: %s' % target_dir)
 
         # Create a reference time
         ref_time = datetime.now() - timedelta(seconds=self.min_age)
@@ -489,15 +493,20 @@ class DirWatchScript(SchedulerScript):
         # Store our source paths
         source_paths = self.parse_path_list(self.get('WatchPaths'))
 
-        # Store target directory
-        target_path = tidy_path(self.get('NzbDir'))
+        # Get our Mode
         self.mode = self.get('Mode', DIRWATCH_MODE_DEFAULT)
-        if not isdir(target_path):
-            self.logger.error(
-                "The target directory '%s' was not found." % \
-                target_path,
-            )
-            return False
+
+        if self.mode != DIRWATCH_MODE.REMOTE:
+            # Store target directory
+            target_path = tidy_path(self.get('NzbDir'))
+            if not isdir(target_path):
+                self.logger.error(
+                    "The target directory '%s' was not found." % \
+                    target_path,
+                )
+                return False
+        else:
+            target_path = None
 
         return self.watch_library(
             source_paths,
@@ -564,14 +573,15 @@ if __name__ == "__main__":
     from optparse import OptionParser
 
     # Support running from the command line
-    usage = "Usage: %prog [options] -t TargetDir [SrcDir1 [SrcDir2 [...]]]"
+    usage = "Usage: %prog [options] [SrcDir1 [SrcDir2 [...]]]"
     parser = OptionParser(usage=usage)
     parser.add_option(
         "-t",
         "--target-dir",
         dest="target_dir",
         help="The directory you want to move found NZB-Files from the " +\
-             "identified source directories to.",
+             "identified source directories to. This option is required " +\
+             "if not using the --remote (-r) switch.",
         metavar="DIR",
     )
     parser.add_option(
@@ -638,8 +648,7 @@ if __name__ == "__main__":
         dest="remote",
         help="Perform a remote push to NZBGet. This allows you to scan "
         "directories for NZB-Files on different machines and still remotely "
-        "push them to your central NZBGet server.  This option requires that "
-        "you additionally specify the --api-url (-u) switch to work.",
+        "push them to your central NZBGet server.",
     )
     parser.add_option(
         "-D",
@@ -744,12 +753,19 @@ if __name__ == "__main__":
         # Toggle Remote Mode
         script.set('Mode', DIRWATCH_MODE.REMOTE)
 
-        if not _api_url:
-            script.logger.error(
-                'You must specify an API URL (--api-url / -u) when using '
-                'the --remote (-r) switch.'
-            )
-            exit(EXIT_CODE.FAILURE)
+        # Ensure NzbDir is set
+        script.set('NzbDir', '')
+
+    if not _remote and not script.get('NzbDir') and _target_dir:
+        if not (_preview or _watch_paths):
+            script.set('Mode', DIRWATCH_MODE_DEFAULT)
+
+        if script.get('WatchPaths') is None:
+            # Allow this flag to exist
+            script.set('WatchPaths', '')
+
+        # Finally set the directory the user specified for scanning
+        script.set('NzbDir', _target_dir)
 
     if _max_archive_size:
         try:
@@ -773,18 +789,7 @@ if __name__ == "__main__":
             )
             exit(EXIT_CODE.FAILURE)
 
-    if not script.get('NzbDir') and _target_dir:
-        if not (_preview or _watch_paths):
-            script.set('Mode', DIRWATCH_MODE_DEFAULT)
-
-        if script.get('WatchPaths') is None:
-            # Allow this flag to exist
-            script.set('WatchPaths', '')
-
-        # Finally set the directory the user specified for scanning
-        script.set('NzbDir', _target_dir)
-
-    if not script.script_mode and not script.get('NzbDir'):
+    if not script.script_mode and not script.get('WatchPaths'):
         # Provide some CLI help when NzbDir has been
         # detected as not being identified
         parser.print_help()

@@ -20,6 +20,32 @@ scan a folder in their home directory (or on a network path) instead.
 In short: This script allows you to process NZB-Get files that appear in multiple
 directories instead of just the one.
 
+Remote NZB-File Loading
+=======================
+Where this script gets a bit more powerful is that you can additionally scan NZB-Files
+from another server remotely on your network. All found NZB-Files will be automatically
+pushed directly to your NZB-Get server.
+
+Directory to Category Assignments
+=================================
+You can additionally tell this script to associate NZB-File filled directories with
+a specific category.  This can allow you to manage mulitple directories and assign
+the NZB-Files found within a specific category when being loaded into NZBGet.
+
+This is done by simply adding the ?c=category.name to each directory you specify.
+For example, in NZBGet you may want to have a structure as follows:
+'''
+/
+   /nzbroot/Movies/
+   /nzbroot/TVShows/
+   /nzbroot/MyEBooks/
+'''
+
+You you just add this the NZBGet (DirWatch) Script's configuration:
+'''
+/nzbroot/Movies?c=movie, /nzbroot/TVShows?c=tv, /nzbroot/MyEBooks?c=ebooks
+'''
+
 How It Works
 ============
 Whatever additional path you specify, the script will just move the detected NZB-Files
@@ -70,12 +96,14 @@ the fetching of subtitles.
 
 Here are the switches available to you:
 ```
-Usage: DirWatch.py [options] -t TargetDir [scandir1 [scandir2 [...]]]
+Usage: DirWatch.py [options] [SrcDir1 [SrcDir2 [...]]]
 
+Options:
   -h, --help            show this help message and exit
   -t DIR, --target-dir=DIR
                         The directory you want to move found NZB-Files from
-                        the identified source directories to.
+                        the identified source directories to. This option is
+                        required if not using the --remote (-r) switch.
   -a AGE_IN_SEC, --min-age=AGE_IN_SEC
                         Specify the minimum age a NZB-File must be before
                         considering it for processing. This value is
@@ -84,27 +112,38 @@ Usage: DirWatch.py [options] -t TargetDir [scandir1 [scandir2 [...]]]
                         racing condition where an NZB-File is still being
                         written to disk at the same time as we're trying to
                         process it.
+  -s SIZE_IN_KB, --max-archive-size=SIZE_IN_KB
+                        Specify the maximum size a detected compressed file
+                        can be before ignoring it. If the found compressed
+                        file is within this specified value, it's contents
+                        will be scanned to see if it (only) contains NZB-
+                        Files. These types of files would qualify to be moved
+                        as well. Set this value to Zero (0) to not process
+                        compressed files. The value is interpreted in
+                        Kilobytes and has a default value of 150if not
+                        otherwise specified.
   -p, --preview         This is like a test switch; the actions the script
                         would have otherwise performed are instead just
                         printed to the screen.
   -L FILE, --logfile=FILE
                         Send output to the specified logfile instead of
                         stdout.
+  -u API_URL, --api-url=API_URL
+                        Specify the URL of the NZB-Get API server such as:
+                        nzbget://user:pass@control.nzbget.host (to access
+                        insecure port 6789),
+                        nzbgets://user:pass@control.nzbget.host (to access
+                        secure port 6791),
+                        nzbget://user:pass@control.nzbget.host:port (to
+                        specify your own insecure port), and
+                        nzbgets://user:pass@control.nzbget.host:port (to
+                        specify your own secure port).  By default
+                        nzbget://127.0.0.1 is used.
+  -r, --remote-push     Perform a remote push to NZBGet. This allows you to
+                        scan directories for NZB-Files on different machines
+                        and still remotely push them to your central NZBGet
+                        server.
   -D, --debug           Debug Mode
-
-```
-
-Here is a simple example:
-```bash
-# Scan your library for NZB-Files and print to the sreen what
-# you plan on doing (observe the -p switch):
-python DirWatch.py -p -t /path/to/NZBGet/NzbDir 
-	/path/to/location/with/NZB-Files
-
-# Happy with the plan of action? Just drop the -p switch and the
-# matched NZB-Files will be moved:
-python DirWatch.py -t /path/to/NZBGet/NzbDir 
-	/path/to/location/with/NZB-Files
 
 ```
 
@@ -118,7 +157,7 @@ python DirWatch.py -t /path/to/NZBGet/NzbDir \
 	/home/trevor/Downloads \
 	/home/joe/Dropbox/NZBFiles \
 	/home/jason/Dropbox/NZBFiles \
-	/home/trevor/Dropbox/NZBFiles \
+	/home/trevor/Dropbox/NZBFiles
 ```
 
 Don't forget that if you're using the CLI, you can take advantage of wildcards
@@ -135,4 +174,31 @@ to frequently move matched NZB-Files found in the specified Source Directories
 # $> crontab -e
 # Scan every 2 minutes:
 */2 * * * * /path/to/DirWatch.py -t /path/to/NZBGet/NzbDir ~/DropBox
+```
+
+Consider different servers on your network each obtaining NZB-Files in different
+locations, but you only have 1 NZBGet instance. Perhaps the NZBGet instance
+is even on a different network.  No problem; you can scan multiple locations for
+NZB-Files and then push them remotely to your NZBGet server:
+```bash
+# Scan your libraries for NZB-Files and move them
+# into our remote location done by the --remote (-r) switch
+python DirWatch.py -r -u nzbget://my.nzbget.host \
+	/path/to/nzb-files \
+	/another/path/to/nzb-files
+```
+
+You can also use the category switches with the command line to force category
+assignments per directory:
+```bash
+# Assign categories per directory (optionally) if you wish:
+python DirWatch.py -t /path/to/NZBGet/NzbDir \
+	/home/joe/Downloads/NZBFiles/Movies?c=movie \
+	/home/joe/Downloads/NZBFiles/Shows?c=tv
+	/home/joe/Downloads/NZBFiles/General
+
+# You can do this using remote calls too:
+python DirWatch.py -r -u nzbget://my.nzbget.host \
+	/home/joe/Downloads/NZBFiles/Movies?c=movie \
+	/home/joe/Downloads/NZBFiles/Shows?c=tv
 ```
