@@ -146,16 +146,23 @@ DEFAULT_POLL_TIME_SEC = 60
 # The minimum allowable setting the poll time can be
 MINIMUM_POLL_TIME_SEC = 30
 
+# Keyword that triggers the auto-detection of the category based
+# on what is parsed from the NZB-File (and or filename)
+AUTO_DETECT_CATEGORY_KEY = '*'
+
 class DIRWATCH_MODE(object):
     # Move content to the path specified instead of deleting it
     MOVE = "Move"
     # Do nothing; just preview what was intended to be tidied
     PREVIEW = "Preview"
+    # Do nothing; just preview what was intended to be tidied
+    REMOTE = "Remote Push"
 
 # TidyIt Modes
 DIRWATCH_MODES = (
     DIRWATCH_MODE.PREVIEW,
     DIRWATCH_MODE.MOVE,
+    DIRWATCH_MODE.REMOTE,
 )
 
 # Default in a Read-Only Mode; It's the safest way!
@@ -376,7 +383,7 @@ class DirWatchScript(SchedulerScript):
                     self.logger.warning(
                         'A category was defined, but a connection to NZBGet '\
                         ' could not be established.')
-                    continue;
+                    continue
 
             for fullpath in filtered_matches.iterkeys():
                 # Iterate over each file and move it's content into the source
@@ -387,10 +394,14 @@ class DirWatchScript(SchedulerScript):
                 # We need to open these up and parse the content from within
                 # them instead.
 
-                if not category:
-                    # move our content
+                if not category and self.mode != DIRWATCH_MODE.REMOTE:
+                    # move/preview our content
                     self._handle(fullpath, target_dir)
                     continue
+
+                # Wild card to detect category from the NZB-File and load it
+                if category == AUTO_DETECT_CATEGORY_KEY:
+                    category = None
 
                 # If we reach here, we have some extra processing to do before
                 # we pass the data right into NZBGet via its API
@@ -434,17 +445,18 @@ class DirWatchScript(SchedulerScript):
                 # Load our content directly via it's file
                 elif not self.add_nzb(fullpath, category=category):
                     self.logger.warning(
-                        'Failed to push NZB-File '
-                        '%s to NZBGet (category=%s)' % (
-                            fullpath, category,
-                        ))
+                        'Failed to load NZB-File %s%s' % (
+                        basename(fullpath),
+                        ((category) and ", category='%s'" % category or ""),
+                    ))
                     continue
 
-                self.logger.info('Loaded NZB-File: %s (category=%s)' % (
-                    basename(fullpath), category,
+                self.logger.info('Loaded NZB-File: %s%s' % (
+                    basename(fullpath),
+                    ((category) and ", category='%s'" % category or ""),
                 ))
 
-                # We were successful; unlink our file
+                # We were successful; unlink our (handled) NZB-File
                 try:
                     unlink(fullpath)
 
@@ -620,6 +632,16 @@ if __name__ == "__main__":
         metavar="API_URL",
     )
     parser.add_option(
+        "-r",
+        "--remote-push",
+        action="store_true",
+        dest="remote",
+        help="Perform a remote push to NZBGet. This allows you to scan "
+        "directories for NZB-Files on different machines and still remotely "
+        "push them to your central NZBGet server.  This option requires that "
+        "you additionally specify the --api-url (-u) switch to work.",
+    )
+    parser.add_option(
         "-D",
         "--debug",
         action="store_true",
@@ -648,11 +670,12 @@ if __name__ == "__main__":
     _preview = options.preview_only is True
     _target_dir = options.target_dir
     _api_url = options.api_url
+    _remote = options.remote
 
     # Default Script Mode
     script_mode = None
 
-    if _api_url or _preview or _watch_paths or _target_dir:
+    if _remote or _api_url or _preview or _watch_paths or _target_dir:
         # By specifying one of the followings; we know for sure that the
         # user is running this script manually from the command line.
         # is running this as a standalone script,
@@ -716,6 +739,17 @@ if __name__ == "__main__":
     if _preview:
         # Toggle Preview Mode
         script.set('Mode', DIRWATCH_MODE.PREVIEW)
+
+    elif _remote:
+        # Toggle Remote Mode
+        script.set('Mode', DIRWATCH_MODE.REMOTE)
+
+        if not _api_url:
+            script.logger.error(
+                'You must specify an API URL (--api-url / -u) when using '
+                'the --remote (-r) switch.'
+            )
+            exit(EXIT_CODE.FAILURE)
 
     if _max_archive_size:
         try:
