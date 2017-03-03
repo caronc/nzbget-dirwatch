@@ -121,14 +121,20 @@ from nzbget import EXIT_CODE
 from nzbget import SCRIPT_MODE
 from nzbget.Utils import tidy_path
 
+# Stick an extension on files prior to handling them.  This prevents
+# them from being detected later, and we can also grasp a handle
+# of what our disk access permissions are because if we can't even
+# rename the file, then we shouldn't be handling it it.
+HANDLING_EXTENSION = ".dw"
+
 # Match paths (path can't have a question makr in it though)
 ARG_EXTRACT_RE = re.compile('^(?P<path>[^?]+)(\?(?P<args>.*))?$')
 
 # Regular expression for the handling of NZB-Files
-NZB_FILE_RE = re.compile('^(?P<filename>.*)\.nzb$', re.IGNORECASE)
+NZB_FILE_RE = re.compile('^(?P<filename>.*\.nzb)(\.dw)?$', re.IGNORECASE)
 
 # Regular expression for the handling of ZIP-Files
-ZIP_FILE_RE = re.compile('^(?P<filename>.*)\.zip$', re.IGNORECASE)
+ZIP_FILE_RE = re.compile('^(?P<filename>.*\.zip)(\.dw)?$', re.IGNORECASE)
 
 # The number of seconds a matched directory/file has to have aged before it
 # is processed further.  This prevents the script from removing content
@@ -191,7 +197,74 @@ class DirWatchScript(SchedulerScript):
     # Define our maxium archive size a compressed file can be
     max_archive_size = DEFAULT_COMPRESSED_MAXSIZE_KB
 
-    def _handle(self, source_path, target_dir):
+    def _remote_move(self, source_path, category=None):
+        """
+        Processes the specified source path and handles remote api
+        calls to NZBGet. If category is set to None, then it is auto-detected
+        (if possible) by reading it from the Meta entries within the NZB-Files
+        """
+
+        # If we reach here, we have some extra processing to do before
+        # we pass the data right into NZBGet via its API
+        result = ZIP_FILE_RE.match(source_path)
+        if result:
+            try:
+                zp = ZipFile(source_path, mode='r')
+                z_contents = zp.namelist()
+
+            except Exception, e:
+                self.logger.warning(
+                    'Could not access Zipped NZB-File %s.' % (
+                        result.group('filename'),
+                    ))
+                self.logger.debug('ZIP Exception %s' % str(e))
+                return None
+
+            # Iterate over our zip files
+            for znzb in z_contents:
+                if not NZB_FILE_RE.match(znzb):
+                    return None
+
+                # Read our content back
+                if not self.add_nzb(basename(znzb),
+                                    content=zp.read(znzb),
+                                    category=category):
+
+                    self.logger.warning(
+                        'Failed to push Compressed NZB-File content '
+                        '%s to NZBGet (category=%s)' % (
+                            result.group('filename'), category,
+                        ))
+
+                    return None
+
+        # Load our content directly via it's file
+        elif not self.add_nzb(source_path, category=category):
+            self.logger.warning(
+                'Failed to load NZB-File %s%s' % (
+                basename(source_path),
+                ((category) and ", category='%s'" % category or ""),
+            ))
+            return None
+
+        self.logger.info('Loaded NZB-File: %s%s' % (
+            basename(source_path),
+            ((category) and ", category='%s'" % category or ""),
+        ))
+
+        # We were successful; unlink our (handled) NZB-File
+        try:
+            unlink(source_path)
+
+        except:
+            self.logger.warning(
+                'Failed to remove NZB-File '
+                '%s after loading it into NZBGet' % (
+                    source_path,
+                ))
+        return None
+
+    def _local_move(self, source_path, target_dir, target_file=None):
         """
         A Simple wrapper to handle content in addition to logging it.
         """
@@ -213,12 +286,15 @@ class DirWatchScript(SchedulerScript):
             )
             return False
 
-        self.logger.info('Scanning Source: %s' % source_path)
+        if target_file is None:
+            target_file = basename(source_path)
+
+        self.logger.info('Scanning Source: %s' % target_file)
 
         # Generate the new filename
         new_fullpath = join(
             target_dir,
-            basename(source_path),
+            target_file,
         )
 
         # Handle duplicate files by prefixing them with a digit:
@@ -239,19 +315,22 @@ class DirWatchScript(SchedulerScript):
             try:
                 move(source_path, new_fullpath)
                 self.logger.info('Moved FILE: %s (%s)' % (
-                    source_path, basename(new_fullpath),
+                    join(dirname(source_path), target_file),
+                    basename(new_fullpath),
                 ))
 
             except Exception, e:
                 self.logger.error('Could not move FILE: %s (%s)' % (
-                    source_path, basename(new_fullpath),
+                    join(dirname(source_path), target_file),
+                    basename(new_fullpath),
                 ))
                 self.logger.debug('Move Exception %s' % str(e))
                 return False
 
         else:
             self.logger.info('PREVIEW ONLY: Handle FILE: %s (%s)' % (
-                source_path, basename(new_fullpath),
+                join(dirname(source_path), target_file),
+                basename(new_fullpath),
             ))
 
         return True
@@ -270,8 +349,7 @@ class DirWatchScript(SchedulerScript):
                 self.logger.error(
                     'Target directory %s was not found.' % target_dir)
                 return False
-
-            self.logger.info('Target directory set to: %s' % target_dir)
+            self.logger.debug('Target directory set to: %s' % target_dir)
 
         # Create a reference time
         ref_time = datetime.now() - timedelta(seconds=self.min_age)
@@ -389,7 +467,7 @@ class DirWatchScript(SchedulerScript):
                         ' could not be established.')
                     continue
 
-            for fullpath in filtered_matches.iterkeys():
+            for _fullpath in filtered_matches.iterkeys():
                 # Iterate over each file and move it's content into the source
                 # however, if a category was parsed, then we need to directly
                 # connect to the NZBGet API and pass the NZB-File along bearing
@@ -398,78 +476,35 @@ class DirWatchScript(SchedulerScript):
                 # We need to open these up and parse the content from within
                 # them instead.
 
+                # Append our extension onto the file
+                fullpath = _fullpath + HANDLING_EXTENSION
+
+                # Move our file into a processing
+                try:
+                    move(_fullpath, fullpath)
+                    self.logger.debug('Preparing FILE: %s (%s)' % (
+                        _fullpath, basename(fullpath),
+                    ))
+
+                except Exception, e:
+                    self.logger.error('Could not prep FILE: %s (%s)' % (
+                        _fullpath, basename(fullpath),
+                    ))
+                    self.logger.debug('Prep Exception %s' % str(e))
+                    continue
+
                 if not category and self.mode != DIRWATCH_MODE.REMOTE:
                     # move/preview our content
-                    self._handle(fullpath, target_dir)
+                    self._local_move(fullpath, target_dir, basename(_fullpath))
                     continue
 
                 # Wild card to detect category from the NZB-File and load it
                 if category == AUTO_DETECT_CATEGORY_KEY:
                     category = None
 
-                # If we reach here, we have some extra processing to do before
-                # we pass the data right into NZBGet via its API
-                if ZIP_FILE_RE.match(fullpath):
-                    try:
-                        zp = ZipFile(fullpath, mode='r')
-                        z_contents = zp.namelist()
+                # Handle Remote Files
+                self._remote_move(fullpath, category)
 
-                    except Exception, e:
-                        self.logger.warning(
-                            'Could not access Zipped NZB-File %s.' % (
-                                fullpath,
-                            ))
-                        self.logger.debug('ZIP Exception %s' % str(e))
-                        continue
-
-                    # Iterate over our zip files
-                    zip_loaded_okay = True
-                    for znzb in z_contents:
-                        if not NZB_FILE_RE.match(znzb):
-                            continue
-
-                        # Read our content back
-                        if not self.add_nzb(basename(znzb),
-                                            content=zp.read(znzb),
-                                            category=category):
-
-                            self.logger.warning(
-                                'Failed to push Compressed NZB-File content '
-                                '%s to NZBGet (category=%s)' % (
-                                    fullpath, category,
-                                ))
-
-                            zip_loaded_okay = False
-                            break
-
-                    if zip_loaded_okay is False:
-                        # We failed
-                        continue
-
-                # Load our content directly via it's file
-                elif not self.add_nzb(fullpath, category=category):
-                    self.logger.warning(
-                        'Failed to load NZB-File %s%s' % (
-                        basename(fullpath),
-                        ((category) and ", category='%s'" % category or ""),
-                    ))
-                    continue
-
-                self.logger.info('Loaded NZB-File: %s%s' % (
-                    basename(fullpath),
-                    ((category) and ", category='%s'" % category or ""),
-                ))
-
-                # We were successful; unlink our (handled) NZB-File
-                try:
-                    unlink(fullpath)
-
-                except:
-                    self.logger.warning(
-                        'Failed to remove NZB-File '
-                        '%s after loading it into NZBGet' % (
-                            fullpath,
-                        ))
         return True
 
 
