@@ -79,6 +79,22 @@
 #
 #PollTimeSec=60
 
+# DirWatch TempFile Auto-Cleanup (yes, no).
+#
+# This script renames NZB-Files (even the ZIPs that contain them) with
+# a .dw extension just prior to handling them.  This is a failsafe
+# way of not processing it a second time around.  Once these files have
+# been handled, this script attempts to remove them automatically.
+#
+# However... there are cases where file permissions allow for the initial
+# rename (to .dw) to occur, but do not allow the auto-cleanup afterwards.
+#
+# By setting this flag to Yes, you're allowing the script to attempt to
+# remove any lingering .dw files still residing in the DirWatch directories
+# if they're found under the presumption they've been handled already.
+#
+#AutoCleanup=No
+
 # Enable debug logging (yes, no).
 #
 # If you experience a problem, you can bet the developer of this script will
@@ -131,22 +147,30 @@ HANDLING_EXTENSION = ".dw"
 ARG_EXTRACT_RE = re.compile('^(?P<path>[^?]+)(\?(?P<args>.*))?$')
 
 # Regular expression for the handling of NZB-Files
-_NZB_FILE_RE = re.compile(
+STRICTLY_NZB_FILE_RE = re.compile(
     '^(?P<filename>.*)(?P<ext>\.nzb)$', re.IGNORECASE)
+
+# A bit looser version of an NZB-File to which we account for our
+# Handled/Ignore extension
 NZB_FILE_RE = re.compile(
     '^(?P<filename>.*)(?P<ext>\.nzb)(?P<ignore>\.dw)?$', re.IGNORECASE)
 
 # Regular expression for the handling of ZIP-Files
-_ZIP_FILE_RE = re.compile(
-    '^(?P<filename>.*)(?P<ext>\.zip)$', re.IGNORECASE)
 ZIP_FILE_RE = re.compile(
     '^(?P<filename>.*)(?P<ext>\.zip)(?P<ignore>\.dw)?$', re.IGNORECASE)
+
+# Ignore Regular Expression
+IGNORE_FILE_RE = re.compile(
+    '^(?P<filename>.*)(?P<ignore>\.dw)$', re.IGNORECASE)
 
 # The number of seconds a matched directory/file has to have aged before it
 # is processed further.  This prevents the script from removing content
 # that may being processed 'now'.  All content must be older than this
 # to be considered. This value is represented in seconds.
 DEFAULT_MATCH_MINAGE = 30
+
+# The default setting for Auto Cleanup
+DEFAULT_AUTO_CLEANUP = False
 
 # The maximum size a compressed file can be before it is considered to
 # be looked within for NZB-Files
@@ -212,7 +236,7 @@ class DirWatchScript(SchedulerScript):
 
         # If we reach here, we have some extra processing to do before
         # we pass the data right into NZBGet via its API
-        result = ZIP_FILE_RE.match(source_path)
+        result = ZIP_FILE_RE.match(basename(source_path))
         if result:
             try:
                 zp = ZipFile(source_path, mode='r')
@@ -229,7 +253,8 @@ class DirWatchScript(SchedulerScript):
 
             # Iterate over our zip files
             for znzb in z_contents:
-                if _NZB_FILE_RE.match(znzb):
+                # We search exclusively for .nzb files
+                if STRICTLY_NZB_FILE_RE.match(znzb):
                     continue
 
                 # Read our content back
@@ -402,10 +427,10 @@ class DirWatchScript(SchedulerScript):
                     'Source and Target directory (%s) are the same.' % path)
                 continue
 
-            regex_filter=[ _NZB_FILE_RE, ]
+            regex_filter=[ NZB_FILE_RE, ]
             if self.max_archive_size > 0:
                 # Add ZIP Files into our mix
-                regex_filter.append(_ZIP_FILE_RE)
+                regex_filter.append(ZIP_FILE_RE)
 
             # Scan our directory (but not recursively)
             possible_matches = self.get_files(
@@ -421,11 +446,35 @@ class DirWatchScript(SchedulerScript):
                 [ (k, v) for (k, v) in possible_matches.iteritems() \
                  if v['modified'] < ref_time ])
 
+            ignored_matches = dict(
+                [ (k, v) for (k, v) in filtered_matches.iteritems() \
+                 if IGNORE_FILE_RE.match(k) and \
+                    IGNORE_FILE_RE.match(k).group('ignore') ])
+
+            for ignored, _ in ignored_matches.iteritems():
+                self.logger.debug('Ignoring file: %s' % ignored)
+                if self.cleanup:
+                    # file should not be handled as it already has
+                    # been but still lingers; attempt to tidy:
+                    try:
+                        unlink(ignored)
+                        self.logger.info('Auto-Cleanup removed %s' % ignored)
+
+                    except Exception, e:
+                        self.logger.warning(
+                            'Auto-Cleanup failed to remove %s' % (
+                                ignored,
+                        ))
+                        self.logger.debug('Auto-Cleanup Exception %s' % str(e))
+
+                # Eliminate file from search
+                del filtered_matches[ignored]
+
             # Do our compression check as a second step since it's
             # possible to disable it
             if self.max_archive_size > 0:
                 zip_files = [ f for (f, m) in filtered_matches.iteritems() \
-                             if _ZIP_FILE_RE.match(f) is not None and \
+                             if ZIP_FILE_RE.match(f) is not None and \
                              m['filesize'] > 0 and \
                              (m['filesize']/1000) < self.max_archive_size ]
 
@@ -446,7 +495,7 @@ class DirWatchScript(SchedulerScript):
                     # Let's have a look at our contents to see if there is a
                     # non-NZB-File entry
                     is_nzb_only = next((False for i in z_contents \
-                        if _NZB_FILE_RE.match(i) is None), True)
+                        if STRICTLY_NZB_FILE_RE.match(i) is None), True)
                     if not is_nzb_only:
                         self.logger.debug(
                             'ZIP %s: contains non NZB-Files within it.' % (
@@ -461,7 +510,7 @@ class DirWatchScript(SchedulerScript):
 
             if len(filtered_matches) <= 0:
                 self.logger.debug(
-                    'No NZB-Files found in directory %s. Skipping' % path,
+                    'No NZB-Files found in directory %s' % path,
                 )
                 continue
 
@@ -523,6 +572,7 @@ class DirWatchScript(SchedulerScript):
 
         if not self.validate(keys=(
             'WatchPaths',
+            'AutoCleanup',
             'NzbDir',
             )):
             self.logger.error("Missing Environment Variables.")
@@ -539,6 +589,9 @@ class DirWatchScript(SchedulerScript):
 
         # Get our Mode
         self.mode = self.get('Mode', DIRWATCH_MODE_DEFAULT)
+
+        # Cleanup Flag set?
+        self.cleanup = self.parse_bool(self.get('AutoCleanup', DEFAULT_AUTO_CLEANUP))
 
         if self.mode != DIRWATCH_MODE.REMOTE:
             # Store target directory
@@ -695,6 +748,14 @@ if __name__ == "__main__":
         "push them to your central NZBGet server.",
     )
     parser.add_option(
+        "-c",
+        "--auto-cleanup",
+        action="store_true",
+        dest="auto_clean",
+        help="Removes any .dw files detected prior to the handling of "
+        "detected NZB-Files (and/or ZIP files containing them).",
+    )
+    parser.add_option(
         "-D",
         "--debug",
         action="store_true",
@@ -724,11 +785,13 @@ if __name__ == "__main__":
     _target_dir = options.target_dir
     _api_url = options.api_url
     _remote = options.remote
+    _auto_clean = options.auto_clean
 
     # Default Script Mode
     script_mode = None
 
-    if _remote or _api_url or _preview or _watch_paths or _target_dir:
+    if _auto_clean or _remote or _api_url or _preview or _watch_paths \
+            or _target_dir:
         # By specifying one of the followings; we know for sure that the
         # user is running this script manually from the command line.
         # is running this as a standalone script,
@@ -799,6 +862,13 @@ if __name__ == "__main__":
 
         # Ensure NzbDir is set
         script.set('NzbDir', '')
+
+    if script.script_mode == SCRIPT_MODE.NONE:
+        # AutoClean Handling
+        if _auto_clean:
+            script.set('AutoCleanup', 'Yes')
+        else:
+            script.set('AutoCleanup', 'No')
 
     if not _remote and not script.get('NzbDir') and _target_dir:
         if not (_preview or _watch_paths):
