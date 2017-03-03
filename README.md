@@ -41,16 +41,17 @@ with a specific category.  This can allow you to manage mulitple directories
 and assign the NZB-Files found within a specific category when being loaded
 into NZBGet.
 
-This is done by simply adding the ?c=category.name to each directory you
+This is done by simply adding the __?c=category.name__ to each directory you
 specify. For example, in NZBGet you may want to have a structure as follows:
+
 '''
-/
    /nzbroot/Movies/
    /nzbroot/TVShows/
    /nzbroot/MyEBooks/
 '''
 
 You you just add this the NZBGet (DirWatch) Script's configuration:
+
 '''
 /nzbroot/Movies?c=movie, /nzbroot/TVShows?c=tv, /nzbroot/MyEBooks?c=ebooks
 '''
