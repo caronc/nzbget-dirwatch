@@ -131,10 +131,16 @@ HANDLING_EXTENSION = ".dw"
 ARG_EXTRACT_RE = re.compile('^(?P<path>[^?]+)(\?(?P<args>.*))?$')
 
 # Regular expression for the handling of NZB-Files
-NZB_FILE_RE = re.compile('^(?P<filename>.*\.nzb)(\.dw)?$', re.IGNORECASE)
+_NZB_FILE_RE = re.compile(
+    '^(?P<filename>.*)(?P<ext>\.nzb)$', re.IGNORECASE)
+NZB_FILE_RE = re.compile(
+    '^(?P<filename>.*)(?P<ext>\.nzb)(?P<ignore>\.dw)?$', re.IGNORECASE)
 
 # Regular expression for the handling of ZIP-Files
-ZIP_FILE_RE = re.compile('^(?P<filename>.*\.zip)(\.dw)?$', re.IGNORECASE)
+_ZIP_FILE_RE = re.compile(
+    '^(?P<filename>.*)(?P<ext>\.zip)$', re.IGNORECASE)
+ZIP_FILE_RE = re.compile(
+    '^(?P<filename>.*)(?P<ext>\.zip)(?P<ignore>\.dw)?$', re.IGNORECASE)
 
 # The number of seconds a matched directory/file has to have aged before it
 # is processed further.  This prevents the script from removing content
@@ -214,16 +220,17 @@ class DirWatchScript(SchedulerScript):
 
             except Exception, e:
                 self.logger.warning(
-                    'Could not access Zipped NZB-File %s.' % (
+                    'Could not access Zipped NZB-File %s%s.' % (
                         result.group('filename'),
+                        result.group('ext'),
                     ))
                 self.logger.debug('ZIP Exception %s' % str(e))
                 return None
 
             # Iterate over our zip files
             for znzb in z_contents:
-                if not NZB_FILE_RE.match(znzb):
-                    return None
+                if _NZB_FILE_RE.match(znzb):
+                    continue
 
                 # Read our content back
                 if not self.add_nzb(basename(znzb),
@@ -232,8 +239,10 @@ class DirWatchScript(SchedulerScript):
 
                     self.logger.warning(
                         'Failed to push Compressed NZB-File content '
-                        '%s to NZBGet (category=%s)' % (
-                            result.group('filename'), category,
+                        '%s%s to NZBGet (category=%s)' % (
+                            result.group('filename'),
+                            result.group('ext'),
+                            category,
                         ))
 
                     return None
@@ -393,10 +402,10 @@ class DirWatchScript(SchedulerScript):
                     'Source and Target directory (%s) are the same.' % path)
                 continue
 
-            regex_filter=[ NZB_FILE_RE, ]
+            regex_filter=[ _NZB_FILE_RE, ]
             if self.max_archive_size > 0:
                 # Add ZIP Files into our mix
-                regex_filter.append(ZIP_FILE_RE)
+                regex_filter.append(_ZIP_FILE_RE)
 
             # Scan our directory (but not recursively)
             possible_matches = self.get_files(
@@ -416,7 +425,7 @@ class DirWatchScript(SchedulerScript):
             # possible to disable it
             if self.max_archive_size > 0:
                 zip_files = [ f for (f, m) in filtered_matches.iteritems() \
-                             if ZIP_FILE_RE.match(f) is not None and \
+                             if _ZIP_FILE_RE.match(f) is not None and \
                              m['filesize'] > 0 and \
                              (m['filesize']/1000) < self.max_archive_size ]
 
@@ -437,7 +446,7 @@ class DirWatchScript(SchedulerScript):
                     # Let's have a look at our contents to see if there is a
                     # non-NZB-File entry
                     is_nzb_only = next((False for i in z_contents \
-                        if NZB_FILE_RE.match(i) is None), True)
+                        if _NZB_FILE_RE.match(i) is None), True)
                     if not is_nzb_only:
                         self.logger.debug(
                             'ZIP %s: contains non NZB-Files within it.' % (
