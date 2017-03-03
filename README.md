@@ -5,35 +5,44 @@ DirWatch Scheduler Script
 ========================
 DirWatch is a script that allows you to identify one or more directories it
 should scan for NZB-Files in. When an NZB-File is found (or even a zip file
-containing NZB-Files), it is moved to a new directory of your choice.
+containing NZB-Files), it is pushed either locally or remotely (depending on
+how it's configured) to a central NZBGet server.
+
+It can also just perform basic moving for any NZBProcessing application (such
+as SABnzbd.  It can be easily scripted to simply read NZBFiles from multiple
+locations and place them centrally at another.
 
 Why Would I Need This?
 ======================
 NZBGet limits you to identifying _just one_ directory it should scan/watch for
 NZB-Files in (for processing). This is okay for most people, but consider a
-scenario where you have a DropBox share that you might want to put something in
-from your phone, or at work.  Wouldn't it be great if NZBGet picked that up for
-processing too!  Maybe there are multiple users on your network who want use
-NZBGet too, rather then giving them your admin login (to NZBGet), you can just
-scan a folder in their home directory (or on a network path) instead.
-
-In short: This script allows you to process NZB-Get files that appear in multiple
-directories instead of just the one.
-
-Remote NZB-File Loading
-=======================
-Where this script gets a bit more powerful is that you can additionally scan NZB-Files
-from another server remotely on your network. All found NZB-Files will be automatically
-pushed directly to your NZB-Get server.
+scenario where...
+- you have a DropBox share; you could easily download an NZB-File from your
+  tablet/phone and copy into here.  The just know that back at home NZBGet just
+  processed it for download for when you get home.
+- Maybe there are multiple users on your network who each want use
+  NZBGet too; rather then giving them your admin login (to NZBGet), you can
+  just set this script up to scan a designated folder (in each of their home
+  directories) and process everything found. Thus, there is no need to run
+  multiple instances of NZBGet.
+- Consider that you have a media server somewhere in your house but want to
+  post NZB-Files to it manually whenever they appear in your laptops Download
+  directory.<br/>No problem! This script can run on any machine and read from
+  as many directories as you want! It can also remotely post whatever it finds
+  (NZB related) to your central NZBGet server.
+- You can remotely post content and assign categories to the content as it is
+  pushed just based on the directory the NZB-File was found in.  To each
+  directory their own category.
 
 Directory to Category Assignments
 =================================
-You can additionally tell this script to associate NZB-File filled directories with
-a specific category.  This can allow you to manage mulitple directories and assign
-the NZB-Files found within a specific category when being loaded into NZBGet.
+You can additionally tell this script to associate NZB-File filled directories
+with a specific category.  This can allow you to manage mulitple directories
+and assign the NZB-Files found within a specific category when being loaded
+into NZBGet.
 
-This is done by simply adding the ?c=category.name to each directory you specify.
-For example, in NZBGet you may want to have a structure as follows:
+This is done by simply adding the ?c=category.name to each directory you
+specify. For example, in NZBGet you may want to have a structure as follows:
 '''
 /
    /nzbroot/Movies/
@@ -143,6 +152,9 @@ Options:
                         scan directories for NZB-Files on different machines
                         and still remotely push them to your central NZBGet
                         server.
+  -c, --auto-cleanup    Removes any .dw files detected prior to the handling
+                        of detected NZB-Files (and/or ZIP files containing
+                        them).
   -D, --debug           Debug Mode
 
 ```
