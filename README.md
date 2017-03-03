@@ -43,18 +43,16 @@ into NZBGet.
 
 This is done by simply adding the __?c=category.name__ to each directory you
 specify. For example, in NZBGet you may want to have a structure as follows:
-
-'''
+```bash
    /nzbroot/Movies/
    /nzbroot/TVShows/
    /nzbroot/MyEBooks/
-'''
+```
 
 You you just add this the NZBGet (DirWatch) Script's configuration:
-
-'''
+```bash
 /nzbroot/Movies?c=movie, /nzbroot/TVShows?c=tv, /nzbroot/MyEBooks?c=ebooks
-'''
+```
 
 How It Works
 ============
