@@ -118,6 +118,7 @@ from os.path import splitext
 from os.path import expanduser
 from os.path import exists
 from shutil import move
+from shutil import copy
 from zipfile import ZipFile
 from time import sleep
 from urlparse import parse_qsl
@@ -227,7 +228,7 @@ class DirWatchScript(SchedulerScript):
     # Define our maxium archive size a compressed file can be
     max_archive_size = DEFAULT_COMPRESSED_MAXSIZE_KB
 
-    def _remote_move(self, source_path, category=None):
+    def remote_push(self, source_path, category=None):
         """
         Processes the specified source path and handles remote api
         calls to NZBGet. If category is set to None, then it is auto-detected
@@ -249,7 +250,7 @@ class DirWatchScript(SchedulerScript):
                         result.group('ext'),
                     ))
                 self.logger.debug('ZIP Exception %s' % str(e))
-                return None
+                return False
 
             # Iterate over our zip files
             for znzb in z_contents:
@@ -270,8 +271,6 @@ class DirWatchScript(SchedulerScript):
                             category,
                         ))
 
-                    return None
-
         # Load our content directly via it's file
         elif not self.add_nzb(source_path, category=category):
             self.logger.warning(
@@ -279,26 +278,16 @@ class DirWatchScript(SchedulerScript):
                 basename(source_path),
                 ((category) and ", category='%s'" % category or ""),
             ))
-            return None
+            return False
 
         self.logger.info('Loaded NZB-File: %s%s' % (
             basename(source_path),
             ((category) and ", category='%s'" % category or ""),
         ))
 
-        # We were successful; unlink our (handled) NZB-File
-        try:
-            unlink(source_path)
+        return True
 
-        except:
-            self.logger.warning(
-                'Failed to remove NZB-File '
-                '%s after loading it into NZBGet' % (
-                    source_path,
-                ))
-        return None
-
-    def _local_move(self, source_path, target_dir, target_file=None):
+    def local_push(self, source_path, target_dir, target_file=None):
         """
         A Simple wrapper to handle content in addition to logging it.
         """
@@ -345,27 +334,26 @@ class DirWatchScript(SchedulerScript):
             new_fullpath = _new_fullpath
 
         if self.mode == DIRWATCH_MODE.MOVE:
-            # Move our file
+            if self.cleanup:
+                _handle = move
+            else:
+                _handle = copy
+
+            # Handle our file
             try:
-                move(source_path, new_fullpath)
-                self.logger.info('Moved FILE: %s (%s)' % (
+                _handle(source_path, new_fullpath)
+                self.logger.info('Handled FILE: %s (%s)' % (
                     join(dirname(source_path), target_file),
                     basename(new_fullpath),
                 ))
 
             except Exception, e:
-                self.logger.error('Could not move FILE: %s (%s)' % (
+                self.logger.error('Could not handle FILE: %s (%s)' % (
                     join(dirname(source_path), target_file),
                     basename(new_fullpath),
                 ))
-                self.logger.debug('Move Exception %s' % str(e))
+                self.logger.debug('Handle Exception %s' % str(e))
                 return False
-
-        else:
-            self.logger.info('PREVIEW ONLY: Handle FILE: %s (%s)' % (
-                join(dirname(source_path), target_file),
-                basename(new_fullpath),
-            ))
 
         return True
 
@@ -533,6 +521,11 @@ class DirWatchScript(SchedulerScript):
                 # we're dealing with zip (compressed files).
                 # We need to open these up and parse the content from within
                 # them instead.
+                if self.mode == DIRWATCH_MODE.PREVIEW:
+                    self.logger.info('PREVIEW ONLY: Handle FILE: %s' % (
+                        _fullpath,
+                    ))
+                    continue
 
                 # Append our extension onto the file
                 fullpath = _fullpath + HANDLING_EXTENSION
@@ -540,7 +533,7 @@ class DirWatchScript(SchedulerScript):
                 # Move our file into a processing
                 try:
                     move(_fullpath, fullpath)
-                    self.logger.debug('Preparing FILE: %s (%s)' % (
+                    self.logger.debug('Prepared FILE: %s (%s)' % (
                         _fullpath, basename(fullpath),
                     ))
 
@@ -553,7 +546,19 @@ class DirWatchScript(SchedulerScript):
 
                 if not category and self.mode != DIRWATCH_MODE.REMOTE:
                     # move/preview our content
-                    self._local_move(fullpath, target_dir, basename(_fullpath))
+                    if not self.local_push(fullpath, target_dir, basename(_fullpath)):
+                        try:
+                            move(fullpath, _fullpath)
+                            self.logger.debug('Reverted FILE: %s (%s)' % (
+                                fullpath, basename(_fullpath),
+                            ))
+
+                        except Exception, e:
+                            self.logger.error('Could not revert FILE: %s (%s)' % (
+                                fullpath, basename(_fullpath),
+                            ))
+                            self.logger.debug('Revert Exception %s' % str(e))
+
                     continue
 
                 # Wild card to detect category from the NZB-File and load it
@@ -561,7 +566,33 @@ class DirWatchScript(SchedulerScript):
                     category = None
 
                 # Handle Remote Files
-                self._remote_move(fullpath, category)
+                if not self.remote_push(fullpath, category):
+                    # Move our file back for processing later
+                    try:
+                        move(fullpath, _fullpath)
+                        self.logger.debug('Reverted FILE: %s (%s)' % (
+                            fullpath, basename(_fullpath),
+                        ))
+
+                    except Exception, e:
+                        self.logger.error('Could not revert FILE: %s (%s)' % (
+                            fullpath, basename(_fullpath),
+                        ))
+                        self.logger.debug('Revert Exception %s' % str(e))
+                    continue
+
+                if self.cleanup:
+                    # We were successful and cleanup flag is set,
+                    # therefore we unlink our (handled) content:
+                    try:
+                        unlink(fullpath)
+                        self.logger.info('Auto-Cleanup removed %s' % fullpath)
+
+                    except Exception, e:
+                        self.logger.warning(
+                            'Auto-Cleanup failed to remove %s' % (
+                                fullpath,
+                        ))
 
         return True
 
