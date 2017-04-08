@@ -8,9 +8,9 @@ should scan for NZB-Files in. When an NZB-File is found (or even a zip file
 containing NZB-Files), it is pushed either locally or remotely (depending on
 how it's configured) to a central NZBGet server.
 
-It can also just perform basic moving for any NZBProcessing application (such
-as SABnzbd.  It can be easily scripted to simply read NZBFiles from multiple
-locations and place them centrally at another.
+It can also just perform basic moving for any NZB-Processing application (such
+as SABnzbd.  It can be easily scripted to simply read NZB-Files from multiple
+locations and place them into a central location.
 
 Why Would I Need This?
 ======================
@@ -18,8 +18,8 @@ NZBGet limits you to identifying _just one_ directory it should scan/watch for
 NZB-Files in (for processing). This is okay for most people, but consider a
 scenario where...
 - you have a DropBox share; you could easily download an NZB-File from your
-  tablet/phone and copy into here.  The just know that back at home NZBGet just
-  processed it for download for when you get home.
+  tablet/phone and copy into here.  Then just know that your NZBGet server
+  back at home will processed automatically for you!
 - Maybe there are multiple users on your network who each want use
   NZBGet too; rather then giving them your admin login (to NZBGet), you can
   just set this script up to scan a designated folder (in each of their home
@@ -30,29 +30,36 @@ scenario where...
   directory.<br/>No problem! This script can run on any machine and read from
   as many directories as you want! It can also remotely post whatever it finds
   (NZB related) to your central NZBGet server.
-- You can remotely post content and assign categories to the content as it is
-  pushed just based on the directory the NZB-File was found in.  To each
-  directory their own category.
 
 Directory to Category Assignments
 =================================
-You can additionally tell this script to associate NZB-File filled directories
-with a specific category.  This can allow you to manage mulitple directories
-and assign the NZB-Files found within a specific category when being loaded
-into NZBGet.
+With this script, you can control what categories to assign to what NZB-Files
+you process. So not only can allow manage mulitple directories containing
+NZB-Files, but you can associate whatever category you wish this way too!
 
 This is done by simply adding the __?c=category.name__ to each directory you
-specify. For example, in NZBGet you may want to have a structure as follows:
+wish to monitor. For example, consider a layout like this on your home server:
 ```bash
    /nzbroot/Movies/
    /nzbroot/TVShows/
    /nzbroot/MyEBooks/
 ```
 
-You you just add this the NZBGet (DirWatch) Script's configuration:
+Category assignments are mapped by directories, so in this case you might just
+add the following to NZBGet (DirWatch) Script's configuration:
 ```bash
 /nzbroot/Movies?c=movie, /nzbroot/TVShows?c=tv, /nzbroot/MyEBooks?c=ebooks
 ```
+
+With respect to the example above, you would have just acomplished to following
+mappings for NZBGet:
+| Directory                         | NZBGet Category |
+| --------------------------------- |:--------------- |
+| /nzbroot/Movies/                  | movies          |
+| /nzbroot/TVShows/                 | tv              |
+| /nzbroot/MyEBooks/                | ebooks          |
+
+Easy-Peasy Right?
 
 How It Works
 ============
