@@ -53,6 +53,7 @@ add the following to NZBGet (DirWatch) Script's configuration:
 
 With respect to the example above, you would have just acomplished to following
 mappings for NZBGet:
+
 | Directory                         | NZBGet Category |
 | --------------------------------- |:--------------- |
 | /nzbroot/Movies/                  | movies          |
