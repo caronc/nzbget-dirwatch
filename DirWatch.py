@@ -103,6 +103,9 @@
 #
 #Debug=no
 
+# Issue a tidy of any directories you defined above here:
+#NZBScan@Scan Defined NZB Paths
+
 ### NZBGET SCHEDULER SCRIPT                                                ###
 ##############################################################################
 
@@ -688,6 +691,13 @@ class DirWatchScript(SchedulerScript):
                 "Next NZB-File Scan in %d seconds..." % poll_time,
             )
             sleep(poll_time)
+
+    def action_nzbscan(self, *args, **kwargs):
+        """
+        Execute the NZBScan Test Action
+        """
+        # run a single instance
+        return self.watch()
 
     def main(self, *args, **kwargs):
         """CLI
