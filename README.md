@@ -102,7 +102,7 @@ should be known that DirWatch.py depends on the following packages:
 
 | Name                         | Version | Source                                                                               |
 | ---------------------------- |:------- |:------------------------------------------------------------------------------------ |
-| pynzbget                     | 0.3.2   | https://pypi.python.org/pypi/pynzbget/0.3.2                                          |
+| pynzbget                     | 0.5.1   | https://pypi.python.org/pypi/pynzbget/0.5.1                                          |
 
 Command Line
 ============
