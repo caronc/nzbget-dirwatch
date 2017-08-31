@@ -1,6 +1,9 @@
 __Note:__ This script was intended to work with [NZBGet](http://nzbget.net) as a  _Scheduling_ script. However, it also works perfectly well as a standalone script for others too! It can be easily adapted to anyone's environment.
 See the _Command Line_ section below for details how you can easily use this on it's own (without NZBGet).
 
+[![Paypal](http://repo.nuxref.com/pub/img/paypaldonate.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=MHANV39UZNQ5E)
+[![Patreon](http://repo.nuxref.com/pub/img/patreondonate.svg)](https://www.patreon.com/lead2gold)
+
 DirWatch Scheduler Script
 ========================
 DirWatch is a script that allows you to identify one or more directories it
