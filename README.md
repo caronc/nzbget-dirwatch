@@ -74,11 +74,14 @@ then you must provide the _NzbDir_ as an argument. There are examples of this be
 
 Installation Instructions
 =========================
-1. Ensure you have at least Python v2.6 or higher installed onto your system.
-2. Simply place the __DirWatch.py__ and __DirWatch__ directory together.
+1. Ensure you have at least Python v2.7 or higher installed onto your system.
+```bash
+# Pull in dependencies:
+pip install -r requirements.txt
+```
+2. Simply place the __DirWatch.py__ into your NZBGet scripts directory.
    * __NZBGet users__: you will want to place these inside of your _nzbget/scripts_ directory. Please ensure you are running _(at least)_ NZBGet v11.0 or higher. You can acquire the latest version of of it from [here](http://nzbget.net/download). <br/><br/>Create a __Schedule__; you can do this from inside NZBGet. From the __Settings__ -> __Scheduler__ section, you can choose to __[Add Task]__.
-
-1. Ensure you have at least Python v2.6 or higher installed onto your system.
+3. Optionally set up an NZBGet Scheduled Task:
    * TaskX.Time:
       * Setting for NZBGet _Versions < v18_: __*:00,*:05,*:10,*:15,*:20,*:25,*:30,*:35,*:40,*:45,*:50,*:55__ <br/> This basically does a check every _5 minutes_ to see if the _DirWatch_ plugin is running. This means if you restart NZBGet or reload it's configuration for whatever reason; you'll just have to wait up to (a maximum of) 5 minutes before the script re-launches and takes over (using it's configured poll time).
       * Setting for NZBGet _Versions >= v18_: __*__<br/> A new feature allowing NZBGet to automatically start up any Scheduled service if you simply define a single asterix (__*__) as it's scheduled start time. So for this version an astrix is all you need.
@@ -90,22 +93,6 @@ The Non-NZBGet users can also use this script via a cron (or simply call it
 from the command line) to automatically poll directories for the latest
 subtitles for the video content within it. See the __Command Line__ section
 below for more instructions on how to do this.
-
-**Note:** The _DirWatch_ directory provides all of the nessisary dependencies
-in order for this script to work correctly. The directory is only required
-if you do not have the packages already available to your global
-environment. These dependant packages are all identified under the
-_Dependencies_ section below.
-
-Dependencies
-============
-The following dependencies are already provided for you within the
-_DirWatch_ directory and no further effort is required by you. However, it
-should be known that DirWatch.py depends on the following packages:
-
-| Name                         | Version | Source                                                                               |
-| ---------------------------- |:------- |:------------------------------------------------------------------------------------ |
-| pynzbget                     | 0.5.1   | https://pypi.python.org/pypi/pynzbget/0.5.1                                          |
 
 Command Line
 ============

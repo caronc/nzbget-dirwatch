@@ -124,12 +124,16 @@ from shutil import move
 from shutil import copy
 from zipfile import ZipFile
 from time import sleep
-from urlparse import parse_qsl
+try:
+    # Python 2.7
+    from urlparse import parse_qsl
+
+except ImportError:
+    from urllib.parse import parse_qsl
 
 # This is required if the below environment variables
 # are not included in your environment already
 import sys
-sys.path.insert(0, join(dirname(__file__), 'DirWatch'))
 
 # Script dependencies identified below
 from datetime import timedelta
@@ -246,7 +250,7 @@ class DirWatchScript(SchedulerScript):
                 zp = ZipFile(source_path, mode='r')
                 z_contents = zp.namelist()
 
-            except Exception, e:
+            except Exception as e:
                 self.logger.warning(
                     'Could not access Zipped NZB-File %s%s.' % (
                         result.group('filename'),
@@ -350,7 +354,7 @@ class DirWatchScript(SchedulerScript):
                     basename(new_fullpath),
                 ))
 
-            except Exception, e:
+            except Exception as e:
                 self.logger.error('Could not handle FILE: %s (%s)' % (
                     join(dirname(source_path), target_file),
                     basename(new_fullpath),
@@ -451,7 +455,7 @@ class DirWatchScript(SchedulerScript):
                         unlink(ignored)
                         self.logger.info('Auto-Cleanup removed %s' % ignored)
 
-                    except Exception, e:
+                    except Exception as e:
                         self.logger.warning(
                             'Auto-Cleanup failed to remove %s' % (
                                 ignored,
@@ -476,7 +480,7 @@ class DirWatchScript(SchedulerScript):
                         zp = ZipFile(zfile, mode='r')
                         z_contents = zp.namelist()
 
-                    except Exception, e:
+                    except Exception as e:
                         self.logger.error('Could not peek in ZIP: %s' % zfile)
                         self.logger.debug('ZIP Exception %s' % str(e))
                         # pop file from our move list
@@ -540,7 +544,7 @@ class DirWatchScript(SchedulerScript):
                         _fullpath, basename(fullpath),
                     ))
 
-                except Exception, e:
+                except Exception as e:
                     self.logger.error('Could not prep FILE: %s (%s)' % (
                         _fullpath, basename(fullpath),
                     ))
@@ -556,7 +560,7 @@ class DirWatchScript(SchedulerScript):
                                 fullpath, basename(_fullpath),
                             ))
 
-                        except Exception, e:
+                        except Exception as e:
                             self.logger.error('Could not revert FILE: %s (%s)' % (
                                 fullpath, basename(_fullpath),
                             ))
@@ -577,7 +581,7 @@ class DirWatchScript(SchedulerScript):
                             fullpath, basename(_fullpath),
                         ))
 
-                    except Exception, e:
+                    except Exception as e:
                         self.logger.error('Could not revert FILE: %s (%s)' % (
                             fullpath, basename(_fullpath),
                         ))
@@ -591,7 +595,7 @@ class DirWatchScript(SchedulerScript):
                         unlink(fullpath)
                         self.logger.info('Auto-Cleanup removed %s' % fullpath)
 
-                    except Exception, e:
+                    except Exception as e:
                         self.logger.warning(
                             'Auto-Cleanup failed to remove %s' % (
                                 fullpath,
