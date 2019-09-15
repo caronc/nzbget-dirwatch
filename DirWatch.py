@@ -438,15 +438,15 @@ class DirWatchScript(SchedulerScript):
 
             # Filter our files that are too new
             filtered_matches = dict(
-                [ (k, v) for (k, v) in possible_matches.iteritems() \
+                [ (k, v) for (k, v) in possible_matches.items() \
                  if v['modified'] < ref_time ])
 
             ignored_matches = dict(
-                [ (k, v) for (k, v) in filtered_matches.iteritems() \
+                [ (k, v) for (k, v) in filtered_matches.items() \
                  if IGNORE_FILE_RE.match(k) and \
                     IGNORE_FILE_RE.match(k).group('ignore') ])
 
-            for ignored, _ in ignored_matches.iteritems():
+            for ignored, _ in ignored_matches.items():
                 self.logger.debug('Ignoring file: %s' % ignored)
                 if self.cleanup:
                     # file should not be handled as it already has
@@ -468,7 +468,7 @@ class DirWatchScript(SchedulerScript):
             # Do our compression check as a second step since it's
             # possible to disable it
             if self.max_archive_size > 0:
-                zip_files = [ f for (f, m) in filtered_matches.iteritems() \
+                zip_files = [ f for (f, m) in filtered_matches.items() \
                              if ZIP_FILE_RE.match(f) is not None and \
                              m['filesize'] > 0 and \
                              (m['filesize']/1000) < self.max_archive_size ]
@@ -520,7 +520,7 @@ class DirWatchScript(SchedulerScript):
                         ' could not be established.')
                     continue
 
-            for _fullpath in filtered_matches.iterkeys():
+            for _fullpath in filtered_matches.keys():
                 # Iterate over each file and move it's content into the source
                 # however, if a category was parsed, then we need to directly
                 # connect to the NZBGet API and pass the NZB-File along bearing
