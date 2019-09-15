@@ -127,9 +127,11 @@ from time import sleep
 try:
     # Python 2.7
     from urlparse import parse_qsl
+    from urllib import unquote
 
 except ImportError:
     from urllib.parse import parse_qsl
+    from urllib.parse import unquote
 
 # This is required if the below environment variables
 # are not included in your environment already
@@ -166,6 +168,9 @@ NZB_FILE_RE = re.compile(
 # Regular expression for the handling of ZIP-Files
 ZIP_FILE_RE = re.compile(
     '^(?P<filename>.*)(?P<ext>\.zip)(?P<ignore>\.dw)?$', re.IGNORECASE)
+
+MARKED_FILE_RE = re.compile(
+    '^(?P<filename>.*)(?P<ignore>\.dw)?$', re.IGNORECASE)
 
 # Ignore Regular Expression
 IGNORE_FILE_RE = re.compile(
@@ -234,6 +239,34 @@ class DirWatchScript(SchedulerScript):
 
     # Define our maxium archive size a compressed file can be
     max_archive_size = DEFAULT_COMPRESSED_MAXSIZE_KB
+
+    def mark_handled(self, path):
+        """
+        Marks a file handled by adding the .dw extension. This is only
+        done if the file doesn't already have this marking.
+        """
+        result = MARKED_FILE_RE.match(path)
+        if result and result.group('ignore'):
+            # Nothing to do
+            return True
+
+        # Append our extension onto the file
+        newpath = result.group('filename') + HANDLING_EXTENSION
+
+        # Move our file into a processing
+        try:
+            move(path, newpath)
+            self.logger.debug('Marked FILE: %s (%s)' % (
+                path, basename(newpath),
+            ))
+
+        except Exception as e:
+            self.logger.error('Could not prep FILE: %s (%s)' % (
+                path, basename(newpath),
+            ))
+            self.logger.debug('Prep Exception %s' % str(e))
+            return False
+        return True
 
     def remote_push(self, source_path, category=None):
         """
@@ -384,7 +417,6 @@ class DirWatchScript(SchedulerScript):
         ref_time = datetime.now() - timedelta(seconds=self.min_age)
 
         for _path in sources:
-
             _parsed = ARG_EXTRACT_RE.match(_path)
 
             # create an argument map
@@ -534,72 +566,36 @@ class DirWatchScript(SchedulerScript):
                     ))
                     continue
 
-                # Append our extension onto the file
-                fullpath = _fullpath + HANDLING_EXTENSION
-
-                # Move our file into a processing
-                try:
-                    move(_fullpath, fullpath)
-                    self.logger.debug('Prepared FILE: %s (%s)' % (
-                        _fullpath, basename(fullpath),
-                    ))
-
-                except Exception as e:
-                    self.logger.error('Could not prep FILE: %s (%s)' % (
-                        _fullpath, basename(fullpath),
-                    ))
-                    self.logger.debug('Prep Exception %s' % str(e))
-                    continue
-
-                if not category and self.mode != DIRWATCH_MODE.REMOTE:
+                if not category and target_dir is not None:
                     # move/preview our content
-                    if not self.local_push(fullpath, target_dir, basename(_fullpath)):
-                        try:
-                            move(fullpath, _fullpath)
-                            self.logger.debug('Reverted FILE: %s (%s)' % (
-                                fullpath, basename(_fullpath),
-                            ))
-
-                        except Exception as e:
-                            self.logger.error('Could not revert FILE: %s (%s)' % (
-                                fullpath, basename(_fullpath),
-                            ))
-                            self.logger.debug('Revert Exception %s' % str(e))
-
-                    continue
+                    if not self.local_push(_fullpath, target_dir):
+                        continue
 
                 # Wild card to detect category from the NZB-File and load it
                 if category == AUTO_DETECT_CATEGORY_KEY:
                     category = None
 
                 # Handle Remote Files
-                if not self.remote_push(fullpath, category):
+                if target_dir is None and not self.remote_push(_fullpath, category):
                     # Move our file back for processing later
-                    try:
-                        move(fullpath, _fullpath)
-                        self.logger.debug('Reverted FILE: %s (%s)' % (
-                            fullpath, basename(_fullpath),
-                        ))
-
-                    except Exception as e:
-                        self.logger.error('Could not revert FILE: %s (%s)' % (
-                            fullpath, basename(_fullpath),
-                        ))
-                        self.logger.debug('Revert Exception %s' % str(e))
                     continue
+
 
                 if self.cleanup:
                     # We were successful and cleanup flag is set,
                     # therefore we unlink our (handled) content:
                     try:
-                        unlink(fullpath)
-                        self.logger.info('Auto-Cleanup removed %s' % fullpath)
+                        unlink(_fullpath)
+                        self.logger.info('Auto-Cleanup removed %s' % _fullpath)
 
                     except Exception as e:
                         self.logger.warning(
                             'Auto-Cleanup failed to remove %s' % (
                                 fullpath,
                         ))
+                else:
+                    # if we got here, we were successful; so mark our content
+                    self.mark_handled(_fullpath)
 
         return True
 
@@ -611,7 +607,6 @@ class DirWatchScript(SchedulerScript):
         if not self.validate(keys=(
             'WatchPaths',
             'AutoCleanup',
-            'NzbDir',
             )):
             self.logger.error("Missing Environment Variables.")
             return False
@@ -631,8 +626,9 @@ class DirWatchScript(SchedulerScript):
         # Cleanup Flag set?
         self.cleanup = self.parse_bool(self.get('AutoCleanup', DEFAULT_AUTO_CLEANUP))
 
-        if self.mode != DIRWATCH_MODE.REMOTE:
-            # Store target directory
+        if self.get('NzbDir'):
+            # Store target directory (if set) otherwise we assume a remote
+            # setup
             target_path = tidy_path(self.get('NzbDir'))
             if not isdir(target_path):
                 self.logger.error(
@@ -880,13 +876,13 @@ if __name__ == "__main__":
 
             if 'user' in url:
                 if url['user']:
-                    script.set('ControlUsername', url['user'])
+                    script.set('ControlUsername', unquote(url['user']))
                 else:
                     script.set('ControlUsername', '')
 
             if 'password' in url:
                 if url['password']:
-                    script.set('ControlPassword', url['password'])
+                    script.set('ControlPassword', unquote(url['password']))
                 else:
                     script.set('ControlPassword', '')
 
