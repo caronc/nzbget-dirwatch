@@ -4,7 +4,7 @@
 # DirWatch scan script for NZBGet to move nzb files detected elsewhere
 # into NZBGet's file queue for processing.
 #
-# Copyright (C) 2017-2019 Chris Caron <lead2gold@gmail.com>
+# Copyright (C) 2017-2020 Chris Caron <lead2gold@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU Lesser General Public License as published by
@@ -30,9 +30,9 @@
 #
 # Info about this DirWatch NZB Script:
 # Author: Chris Caron (lead2gold@gmail.com).
-# Date: Fri, Jul 19th, 2019.
+# Date: Tue, Sep 8th, 2020.
 # License: GPLv3 (http://www.gnu.org/licenses/gpl.html).
-# Script Version: 0.5.0
+# Script Version: 0.6.0
 #
 # The script takes a series of directories you want to monitor.
 #
